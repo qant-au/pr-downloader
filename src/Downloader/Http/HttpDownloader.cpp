@@ -310,7 +310,16 @@ static bool setupDownload(CURLM* curlm, DownloadData* piece)
 	piece->curlw = std::make_unique<CurlWrapper>();
 	CURL* curle = piece->curlw->GetHandle();
 
+#ifdef __APPLE__
+	// macOS curl (SecureTransport/LibreSSL) corrupts HTTP/2 multiplexing
+	// under the many concurrent piece transfers of a rapid pool download,
+	// failing with CURLE_SEND_ERROR ("Failed sending data to the peer").
+	// Use HTTP/1.1 (separate connections per transfer) here. PIPEWAIT only
+	// makes sense for HTTP/2 stream multiplexing, so skip it too.
+	curl_easy_setopt(curle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+#else
 	curl_easy_setopt(curle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2);
+#endif
 	curl_easy_setopt(curle, CURLOPT_PRIVATE, piece);
 	curl_easy_setopt(curle, CURLOPT_WRITEFUNCTION, multi_write_data);
 	curl_easy_setopt(curle, CURLOPT_WRITEDATA, piece);
@@ -318,7 +327,9 @@ static bool setupDownload(CURLM* curlm, DownloadData* piece)
 	curl_easy_setopt(curle, CURLOPT_XFERINFODATA, piece);
 	curl_easy_setopt(curle, CURLOPT_XFERINFOFUNCTION, progress_func);
 	curl_easy_setopt(curle, CURLOPT_URL, piece->mirror.c_str());
+#ifndef __APPLE__
 	curl_easy_setopt(curle, CURLOPT_PIPEWAIT, 1L);
+#endif
 	curl_easy_setopt(curle, CURLOPT_BUFFERSIZE, 16384);
 
 	piece->curlw->AddHeader("X-Prd-Retry-Num: " + std::to_string(piece->retry_num));

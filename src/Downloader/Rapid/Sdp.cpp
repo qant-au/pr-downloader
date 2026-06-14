@@ -87,7 +87,19 @@ getDownloadsList(const std::vector<std::unique_ptr<IDownload>>& downloads)
 static bool useStreamerDownload()
 {
 	const char* use_streamer_env = std::getenv("PRD_RAPID_USE_STREAMER");
-	return use_streamer_env == nullptr || std::string(use_streamer_env) != "false";
+	if (use_streamer_env != nullptr)
+		return std::string(use_streamer_env) != "false";
+#ifdef __APPLE__
+	// The rapid streamer (streamer.cgi) does not work from macOS
+	// pr-downloader against BAR's CDN: it aborts with CURLE_RECV_ERROR over
+	// HTTP/2 and returns an HTTP error over HTTP/1.1. Default to the
+	// per-file pool download path instead (reliable once HTTP/1.1 is forced
+	// for the bulk transfer, see CurlWrapper/HttpDownloader). Override with
+	// PRD_RAPID_USE_STREAMER=true.
+	return false;
+#else
+	return true;
+#endif
 }
 
 bool CSdp::Download(std::vector<std::pair<CSdp*, IDownload*>> const& packages)

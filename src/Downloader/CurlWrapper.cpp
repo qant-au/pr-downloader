@@ -123,6 +123,21 @@ CurlWrapper::CurlWrapper()
 	curl_easy_setopt(handle, CURLOPT_LOW_SPEED_TIME, 30);
 	curl_easy_setopt(handle, CURLOPT_PROTOCOLS_STR, "http,https");
 	curl_easy_setopt(handle, CURLOPT_REDIR_PROTOCOLS_STR, "http,https");
+#ifdef __APPLE__
+	// On macOS pr-downloader links a libcurl built against the
+	// SecureTransport/LibreSSL stack whose HTTP/2 implementation fails
+	// under the many concurrent transfers of a rapid pool/streamer
+	// download: the streamer aborts with CURLE_RECV_ERROR ("Failure when
+	// receiving data from the peer") and per-file pool fetches with
+	// CURLE_SEND_ERROR ("Failed sending data to the peer"), so the game
+	// download dies with errorID 2. Small single requests (repos.gz,
+	// versions.gz, the SDP, map search) negotiate HTTP/2 fine; only the
+	// high-concurrency bulk transfer trips the multiplexing bug. Pin
+	// HTTP/1.1 so curl uses separate connections instead of multiplexed
+	// streams. Other platforms link nghttp2-backed curl where HTTP/2 is
+	// reliable and faster, so leave them on the default negotiation.
+	curl_easy_setopt(handle, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+#endif
 	curl_easy_setopt(handle, CURLOPT_USERAGENT, getAgent());
 	curl_easy_setopt(handle, CURLOPT_FAILONERROR, true);
 	curl_easy_setopt(handle, CURLOPT_FOLLOWLOCATION, 1);
